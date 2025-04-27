@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "packages/editor-core",
+    "packages/turbo-bridge",
+]
+resolver = "2"
