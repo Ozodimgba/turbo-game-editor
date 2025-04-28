@@ -1,59 +1,55 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import './App.css'
-
-interface Editor {
-  get_text_nodes: () => string;
-  add_text_node: (content: string, x: number, y: number) => void;
-  generate_turbo_code: () => string;
-}
-
-interface TextNode {
-  content: string;
-  x: number;
-  y: number;
-  color: string;
-  font_size: number;
-}
+import { useTurboWasm } from './hooks/useTurboWasm';
+import { Editor, TextNode, TurboRenderer } from './types/wasm';
 
 function App() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { wasmModule, loading, error } = useTurboWasm();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [renderer, setRenderer] = useState<TurboRenderer | null>(null);
   const [textNodes, setTextNodes] = useState<TextNode[]>([]);
   const [generatedCode, setGeneratedCode] = useState('');
   const [newText, setNewText] = useState('');
 
+  // Initialize editor and renderer once WASM is loaded
   useEffect(() => {
-    async function initEditor() {
-      try {
-        // This would be replaced with actual WASM import in a real app
-        // const { Editor } = await import('../../editor-core/pkg');
-        // const editor = new Editor();
-        
-        // For now, we'll mock it
-        const editor = {
-          get_text_nodes: () => JSON.stringify([
-            { content: "Hello Turbo!", x: 100, y: 100, color: "#FFFFFF", font_size: 24 }
-          ]),
-          add_text_node: (content: string, x: number, y: number) => {
-            console.log(`Adding text node: ${content} at (${x}, ${y})`);
-          },
-          generate_turbo_code: () => `turbo::go! {
-    text!("Hello Turbo!", x = 100, y = 100, color = 0xFFFFFFFF);
-}`
-        };
-        
-        setEditor(editor);
-        setTextNodes(JSON.parse(editor.get_text_nodes()));
-        setGeneratedCode(editor.generate_turbo_code());
-      } catch (error) {
-        console.error('Failed to initialize editor:', error);
-      }
-    }
+    if (loading || error || !wasmModule) return;
     
-    initEditor();
-  }, []);
+    try {
+      const editorInstance = new wasmModule.Editor();
+      setEditor(editorInstance);
+      
+      if (canvasRef.current) {
+        const rendererInstance = new wasmModule.TurboRenderer(canvasRef.current.id);
+        setRenderer(rendererInstance);
+      }
+      
+      // Initial data loading
+      setTextNodes(JSON.parse(editorInstance.get_text_nodes()));
+      setGeneratedCode(editorInstance.generate_turbo_code());
+    } catch (e) {
+      console.error('Error initializing editor:', e);
+    }
+  }, [wasmModule, loading, error]);
+
+  // Render the canvas preview whenever textNodes change
+  useEffect(() => {
+    if (!renderer || !textNodes.length) return;
+    
+    renderer.clear();
+    
+    textNodes.forEach(node => {
+      // Convert CSS color to number
+      const colorStr = node.color.replace('#', '');
+      const color = parseInt(colorStr, 16);
+      
+      renderer.render_text(node.content, node.x, node.y, color);
+    });
+  }, [renderer, textNodes]);
 
   const handleAddText = () => {
-    if (!editor || !newText) return;
+    if (!editor || !renderer || !newText) return;
     
     const x = Math.floor(Math.random() * 300) + 50;
     const y = Math.floor(Math.random() * 200) + 50;
@@ -64,31 +60,30 @@ function App() {
     setNewText('');
   };
 
+  if (loading) {
+    return <div>Loading Turbo Editor...</div>;
+  }
+
+  if (error) {
+    return <div>Error loading Turbo Editor: {error.message}</div>;
+  }
+
   return (
     <div className="app">
       <header>
-        <h1>Turbo Editor PoC</h1>
+        <h1>Turbo Editor</h1>
       </header>
       
       <div className="editor-layout">
         <div className="canvas">
           <h2>Canvas Preview</h2>
-          <div className="canvas-container" style={{ position: 'relative', width: '100%', height: '400px', backgroundColor: '#222', border: '1px solid #444' }}>
-            {textNodes.map((node, index) => (
-              <div 
-                key={index}
-                style={{
-                  position: 'absolute',
-                  left: `${node.x}px`,
-                  top: `${node.y}px`,
-                  color: node.color,
-                  fontSize: `${node.font_size}px`,
-                }}
-              >
-                {node.content}
-              </div>
-            ))}
-          </div>
+          <canvas 
+            id="editor-canvas"
+            ref={canvasRef}
+            width={800}
+            height={400}
+            style={{ backgroundColor: '#222', border: '1px solid #444' }}
+          />
         </div>
         
         <div className="sidebar">

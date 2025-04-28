@@ -13,5 +13,11 @@ export default defineConfig({
     allowedHosts: [
       '5173-ozodimgba-turbogameedit-i10qbqxbj0a.ws-eu118.gitpod.io',
     ],
+    watch: {
+      ignored: ['!**/node_modules/**'],
+    },
+    hmr: {
+      overlay: true,
+    },
   },
 })
